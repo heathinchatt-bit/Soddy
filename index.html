@@ -2,11 +2,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-MZP1M5S126"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-MZP1M5S126');
+  </script>
+
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Fueling Tracker v2.0" />
+  <meta name="apple-mobile-web-app-title" content="Fueling Tracker" />
   <title>Fueling & Hydration Tracker</title>
   
   <!-- Tailwind CSS -->
@@ -79,7 +89,7 @@
       const [fuelings, setFuelings] = useState(DEFAULT_FUELINGS);
       const [leanAndGreen, setLeanAndGreen] = useState(DEFAULT_LEAN_GREEN);
       const [saveError, setSaveError] = useState(false);
-      const [editingId, setEditingId] = useState(null);
+      const [editingId, setEditingId] = useState(null); // String or ID ('lean_green' or fueling ID)
 
       // Load saved data from localStorage on mount
       useEffect(() => {
@@ -182,10 +192,17 @@
       // Toggle Lean & Green and recalculate all remaining fuelings relative to current time
       const toggleLeanAndGreen = () => {
         const nextCompletedState = !leanAndGreen.completed;
-        setLeanAndGreen(prev => ({ ...prev, completed: nextCompletedState }));
+        const now = new Date();
+        const timeString = nextCompletedState ? formatTime(now) : (leanAndGreen.time || 'Flexible');
+
+        setLeanAndGreen(prev => ({
+          ...prev,
+          completed: nextCompletedState,
+          time: timeString
+        }));
 
         if (nextCompletedState) {
-          let lastTime = new Date(); // Start calculations relative to right now
+          let lastTime = now; // Start calculations relative to right now
           setFuelings(prevFuelings =>
             prevFuelings.map(f => {
               if (!f.completed) {
@@ -198,11 +215,15 @@
         }
       };
 
+      const updateLeanAndGreenTime = (newTime) => {
+        setLeanAndGreen(prev => ({ ...prev, time: newTime }));
+      };
+
       const resetDay = () => {
         if (window.confirm("Are you sure you want to reset today's progress?")) {
           setWater(0);
           setFuelings(DEFAULT_FUELINGS.map(f => ({ ...f, completed: false })));
-          setLeanAndGreen(prev => ({ ...prev, completed: false }));
+          setLeanAndGreen(DEFAULT_LEAN_GREEN);
           try {
             localStorage.removeItem(STORAGE_KEY);
           } catch (e) {
@@ -338,7 +359,27 @@
                     />
                     <div>
                       <p className="font-medium text-sm text-emerald-950">🥗 {leanAndGreen.name}</p>
-                      <span className="text-xs text-emerald-700">Protein + Vegetables + Healthy Fats</span>
+                      <div className="flex items-center gap-1.5 text-xs text-emerald-700">
+                        <span>{leanAndGreen.completed ? 'Completed:' : 'Target:'}</span>
+                        {editingId === 'lean_green' ? (
+                          <input
+                            type="text"
+                            value={leanAndGreen.time}
+                            onChange={(e) => updateLeanAndGreenTime(e.target.value)}
+                            onBlur={() => setEditingId(null)}
+                            onKeyDown={(e) => e.key === 'Enter' && setEditingId(null)}
+                            autoFocus
+                            className="border border-emerald-400 rounded px-1.5 py-0.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => setEditingId('lean_green')}
+                            className="font-semibold underline decoration-dashed underline-offset-2 hover:text-emerald-900 focus:outline-none"
+                          >
+                            {leanAndGreen.time || 'Flexible'} ✏️
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <span className={`text-xs px-2 py-1 rounded ${leanAndGreen.completed ? 'bg-emerald-200 text-emerald-800 font-normal no-underline' : 'bg-emerald-100 text-emerald-700'}`}>
