@@ -3,13 +3,13 @@
 <html lang="en">
 <head>
   <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-MZP1M5S126"></script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-9ZZ6Z8L61Y"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
 
-    gtag('config', 'G-MZP1M5S126');
+    gtag('config', 'G-9ZZ6Z8L61Y');
   </script>
 
   <meta charset="UTF-8" />
@@ -189,29 +189,38 @@
         });
       };
 
-      // Toggle Lean & Green and recalculate all remaining fuelings relative to current time
+      // Toggle Lean & Green: Stamp current time and recalculate all remaining uncompleted fuelings 2.5 hours apart
       const toggleLeanAndGreen = () => {
         const nextCompletedState = !leanAndGreen.completed;
         const now = new Date();
-        const timeString = nextCompletedState ? formatTime(now) : (leanAndGreen.time || 'Flexible');
-
-        setLeanAndGreen(prev => ({
-          ...prev,
-          completed: nextCompletedState,
-          time: timeString
-        }));
 
         if (nextCompletedState) {
-          let lastTime = now; // Start calculations relative to right now
+          const nowTimeString = formatTime(now);
+
+          // 1. Stamp Lean & Green with current local time
+          setLeanAndGreen(prev => ({
+            ...prev,
+            completed: true,
+            time: nowTimeString
+          }));
+
+          // 2. Recalculate all remaining uncompleted fuelings sequentially 2.5 hrs apart from now
+          let currentBaseTime = now;
           setFuelings(prevFuelings =>
             prevFuelings.map(f => {
               if (!f.completed) {
-                lastTime = addHours(lastTime, 2.5);
-                return { ...f, time: formatTime(lastTime) };
+                currentBaseTime = addHours(currentBaseTime, 2.5);
+                return { ...f, time: formatTime(currentBaseTime) };
               }
               return f;
             })
           );
+        } else {
+          // Unchecking Lean & Green
+          setLeanAndGreen(prev => ({
+            ...prev,
+            completed: false
+          }));
         }
       };
 
