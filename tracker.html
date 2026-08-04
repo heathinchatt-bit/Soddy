@@ -23,6 +23,8 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
+    const STORAGE_KEY = 'optavia_daily_tracker_data';
+
     const DEFAULT_FUELINGS = [
       { id: 1, name: 'Fueling 1', time: '08:00 AM', completed: false },
       { id: 2, name: 'Fueling 2', time: '10:30 AM', completed: false },
@@ -54,10 +56,10 @@
       const [saveError, setSaveError] = useState(false);
       const [editingId, setEditingId] = useState(null);
 
-      // Load saved data using iOS-friendly localStorage
+      // Load saved data from localStorage on component mount
       useEffect(() => {
         try {
-          const savedData = localStorage.getItem('optavia-daily-progress');
+          const savedData = localStorage.getItem(STORAGE_KEY);
           if (savedData) {
             const data = JSON.parse(savedData);
             if (typeof data.water === 'number') setWater(data.water);
@@ -65,22 +67,21 @@
             if (data.leanAndGreen) setLeanAndGreen(data.leanAndGreen);
           }
         } catch (err) {
-          console.error("Failed to load local data", err);
+          console.error("Failed to load data from localStorage", err);
         } finally {
           setLoaded(true);
         }
       }, []);
 
-      // Save whenever state changes
+      // Automatically sync state changes to localStorage
       useEffect(() => {
         if (!loaded) return;
         try {
-          localStorage.setItem(
-            'optavia-daily-progress',
-            JSON.stringify({ water, fuelings, leanAndGreen })
-          );
+          const payload = JSON.stringify({ water, fuelings, leanAndGreen });
+          localStorage.setItem(STORAGE_KEY, payload);
           setSaveError(false);
         } catch (err) {
+          console.error("Failed to write to localStorage", err);
           setSaveError(true);
         }
       }, [water, fuelings, leanAndGreen, loaded]);
@@ -122,6 +123,11 @@
           setWater(0);
           setFuelings(DEFAULT_FUELINGS.map(f => ({ ...f, completed: false })));
           setLeanAndGreen(prev => ({ ...prev, completed: false }));
+          try {
+            localStorage.removeItem(STORAGE_KEY);
+          } catch (e) {
+            console.error("Failed to clear localStorage", e);
+          }
         }
       };
 
@@ -264,7 +270,7 @@
               {/* Footer Reset Action */}
               <div className="pt-2 border-t border-slate-100 flex justify-between items-center">
                 <span className="text-xs text-slate-400">
-                  {saveError ? 'Could not save data' : 'Data saves automatically'}
+                  {saveError ? 'Local storage failed' : 'Saved locally'}
                 </span>
                 <button
                   onClick={resetDay}
