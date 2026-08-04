@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Optavia Tracker" />
-  <title>Optavia & Hydration Tracker</title>
+  <meta name="apple-mobile-web-app-title" content="Fueling Tracker v2.0" />
+  <title>Fueling & Hydration Tracker</title>
   
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -23,7 +23,7 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
-    const STORAGE_KEY = 'optavia_daily_tracker_data';
+    const STORAGE_KEY = 'fueling_hydration_tracker_data';
 
     const DEFAULT_FUELINGS = [
       { id: 1, name: 'Fueling 1', time: '08:00 AM', completed: false },
@@ -35,11 +35,10 @@
 
     const DEFAULT_LEAN_GREEN = { name: 'Lean & Green Meal', time: 'Flexible', completed: false };
 
-    // Helper function to add hours to a JS Date object and format as 12-hour AM/PM string
-    function formatFutureTime(baseDate, addedHours) {
-      const d = new Date(baseDate.getTime() + addedHours * 60 * 60 * 1000);
-      let hours = d.getHours();
-      const minutes = d.getMinutes();
+    // Helper: Format Date object to 12-hour 'hh:mm AM/PM' format
+    function formatTime(dateObj) {
+      let hours = dateObj.getHours();
+      const minutes = dateObj.getMinutes();
       const ampm = hours >= 12 ? 'PM' : 'AM';
       hours = hours % 12;
       hours = hours ? hours : 12;
@@ -48,7 +47,32 @@
       return `${strHours}:${strMinutes} ${ampm}`;
     }
 
-    function OptaviaTracker() {
+    // Helper: Parse 'hh:mm AM/PM' string into a JavaScript Date object on today's date
+    function parseTimeString(timeStr) {
+      if (!timeStr) return new Date();
+      const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+      if (!match) return null;
+
+      let hours = parseInt(match[1], 10);
+      const minutes = parseInt(match[2], 10);
+      const period = match[3] ? match[3].toUpperCase() : null;
+
+      if (period) {
+        if (period === 'PM' && hours < 12) hours += 12;
+        if (period === 'AM' && hours === 12) hours = 0;
+      }
+
+      const d = new Date();
+      d.setHours(hours, minutes, 0, 0);
+      return d;
+    }
+
+    // Helper: Add hours to a Date object
+    function addHours(baseDate, hoursToAdd) {
+      return new Date(baseDate.getTime() + hoursToAdd * 60 * 60 * 1000);
+    }
+
+    function FuelingTracker() {
       const [loaded, setLoaded] = useState(false);
       const [water, setWater] = useState(0);
       const [fuelings, setFuelings] = useState(DEFAULT_FUELINGS);
@@ -56,7 +80,7 @@
       const [saveError, setSaveError] = useState(false);
       const [editingId, setEditingId] = useState(null);
 
-      // Load saved data from localStorage on component mount
+      // Load saved data from localStorage on mount
       useEffect(() => {
         try {
           const savedData = localStorage.getItem(STORAGE_KEY);
@@ -73,7 +97,7 @@
         }
       }, []);
 
-      // Automatically sync state changes to localStorage
+      // Save state changes to localStorage
       useEffect(() => {
         if (!loaded) return;
         try {
@@ -89,28 +113,83 @@
       // Handlers
       const addWater = (amount) => setWater((prev) => Math.max(0, prev + amount));
 
+      // Toggle Fueling Completion: Stamp current time upon completion & recalculate subsequent pending fuelings
       const toggleFueling = (id) => {
-        setFuelings(fuelings.map(f => f.id === id ? { ...f, completed: !f.completed } : f));
+        setFuelings(prevFuelings => {
+          const targetIndex = prevFuelings.findIndex(f => f.id === id);
+          if (targetIndex === -1) return prevFuelings;
+
+          const isCompleting = !prevFuelings[targetIndex].completed;
+          const nextFuelings = [...prevFuelings];
+
+          if (isCompleting) {
+            const now = new Date();
+            const nowTimeString = formatTime(now);
+
+            // Stamp current time on completed fueling
+            nextFuelings[targetIndex] = {
+              ...nextFuelings[targetIndex],
+              completed: true,
+              time: nowTimeString
+            };
+
+            // Recalculate remaining future uncompleted fuelings starting 2.5 hours from NOW
+            let currentBaseTime = now;
+            for (let i = targetIndex + 1; i < nextFuelings.length; i++) {
+              if (!nextFuelings[i].completed) {
+                currentBaseTime = addHours(currentBaseTime, 2.5);
+                nextFuelings[i] = {
+                  ...nextFuelings[i],
+                  time: formatTime(currentBaseTime)
+                };
+              }
+            }
+          } else {
+            // Unchecking fueling
+            nextFuelings[targetIndex] = {
+              ...nextFuelings[targetIndex],
+              completed: false
+            };
+          }
+
+          return nextFuelings;
+        });
       };
 
+      // Updates target time manually and recalculates all subsequent fuelings 2.5 hours apart
       const updateFuelingTime = (id, newTime) => {
-        setFuelings(fuelings.map(f => f.id === id ? { ...f, time: newTime } : f));
+        setFuelings(prevFuelings => {
+          const nextFuelings = prevFuelings.map(f => f.id === id ? { ...f, time: newTime } : f);
+          const changedIndex = nextFuelings.findIndex(f => f.id === id);
+
+          let currentBaseTime = parseTimeString(newTime);
+          if (!currentBaseTime) return nextFuelings; // Fallback if format is invalid
+
+          // Chain recalculations for all subsequent fuelings
+          for (let i = changedIndex + 1; i < nextFuelings.length; i++) {
+            currentBaseTime = addHours(currentBaseTime, 2.5);
+            nextFuelings[i] = {
+              ...nextFuelings[i],
+              time: formatTime(currentBaseTime)
+            };
+          }
+
+          return nextFuelings;
+        });
       };
 
+      // Toggle Lean & Green and recalculate all remaining fuelings relative to current time
       const toggleLeanAndGreen = () => {
         const nextCompletedState = !leanAndGreen.completed;
         setLeanAndGreen(prev => ({ ...prev, completed: nextCompletedState }));
 
-        // Recalculate remaining fuelings target times when Lean & Green is marked as completed
         if (nextCompletedState) {
-          const now = new Date();
-          let step = 1;
+          let lastTime = new Date(); // Start calculations relative to right now
           setFuelings(prevFuelings =>
             prevFuelings.map(f => {
               if (!f.completed) {
-                const newTime = formatFutureTime(now, step * 2.5); // Space remaining out every 2.5 hrs
-                step++;
-                return { ...f, time: newTime };
+                lastTime = addHours(lastTime, 2.5);
+                return { ...f, time: formatTime(lastTime) };
               }
               return f;
             })
@@ -150,7 +229,7 @@
 
             {/* Header */}
             <div className="bg-teal-600 text-white p-6 text-center">
-              <h1 className="text-2xl font-bold tracking-wide">Optavia & Hydration Tracker</h1>
+              <h1 className="text-2xl font-bold tracking-wide">Fueling & Hydration Tracker</h1>
               <p className="text-teal-100 text-sm mt-1">Stay on track with your 5 & 1 Plan</p>
             </div>
 
@@ -212,7 +291,7 @@
                         <div>
                           <p className="font-medium text-sm">{fueling.name}</p>
                           <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                            <span>Target:</span>
+                            <span>{fueling.completed ? 'Completed:' : 'Target:'}</span>
                             {editingId === fueling.id ? (
                               <input
                                 type="text"
@@ -287,7 +366,7 @@
     }
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<OptaviaTracker />);
+    root.render(<FuelingTracker />);
   </script>
 </body>
 </html>
